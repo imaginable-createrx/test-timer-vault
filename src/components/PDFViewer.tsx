@@ -1,8 +1,8 @@
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ZoomIn, ZoomOut, AlertCircle, Download, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { ZoomIn, ZoomOut, AlertCircle, Download, RefreshCw } from "lucide-react";
 
 interface PDFViewerProps {
   fileUrl: string;
@@ -13,22 +13,8 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [scale, setScale] = useState(1.0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [viewerMethod, setViewerMethod] = useState<'iframe' | 'object' | 'embed'>('iframe');
+  const [viewerMethod, setViewerMethod] = useState<'google' | 'mozilla' | 'direct'>('google');
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    setIsLoading(true);
-    setHasError(false);
-    
-    // Try different loading methods in sequence
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 3000);
-    
-    return () => clearTimeout(timer);
-  }, [fileUrl, viewerMethod]);
 
   const handleZoomIn = () => {
     setScale((prevScale) => Math.min(prevScale + 0.2, 3.0));
@@ -38,29 +24,17 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
     setScale((prevScale) => Math.max(prevScale - 0.2, 0.5));
   };
 
-  const handlePrevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
-  };
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
-  };
-
   const handleRetry = () => {
     setHasError(false);
     setIsLoading(true);
     
     // Cycle through different viewer methods
-    if (viewerMethod === 'iframe') {
-      setViewerMethod('object');
-    } else if (viewerMethod === 'object') {
-      setViewerMethod('embed');
+    if (viewerMethod === 'google') {
+      setViewerMethod('mozilla');
+    } else if (viewerMethod === 'mozilla') {
+      setViewerMethod('direct');
     } else {
-      setViewerMethod('iframe');
+      setViewerMethod('google');
     }
   };
 
@@ -76,58 +50,41 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
     setHasError(false);
   };
 
-  // Create the PDF URL with proper parameters to force inline viewing
-  const pdfUrl = `${fileUrl}#toolbar=1&navpanes=1&scrollbar=1&page=${currentPage}&zoom=${Math.round(scale * 100)}`;
+  const getViewerUrl = () => {
+    const encodedUrl = encodeURIComponent(fileUrl);
+    
+    switch (viewerMethod) {
+      case 'google':
+        return `https://docs.google.com/gview?url=${encodedUrl}&embedded=true`;
+      case 'mozilla':
+        return `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodedUrl}`;
+      case 'direct':
+        return `${fileUrl}#toolbar=0&navpanes=0&scrollbar=1`;
+      default:
+        return `https://docs.google.com/gview?url=${encodedUrl}&embedded=true`;
+    }
+  };
 
   const renderPDFViewer = () => {
-    const commonStyle = {
-      width: '100%',
-      height: '100%',
-      border: 'none',
-      transform: `scale(${scale})`,
-      transformOrigin: 'top left',
-    };
-
-    switch (viewerMethod) {
-      case 'iframe':
-        return (
-          <iframe
-            src={pdfUrl}
-            style={commonStyle}
-            onLoad={onLoadSuccess}
-            onError={onLoadError}
-            title={fileName}
-            allow="fullscreen"
-          />
-        );
-      
-      case 'object':
-        return (
-          <object
-            data={pdfUrl}
-            type="application/pdf"
-            style={commonStyle}
-            onLoad={onLoadSuccess}
-            onError={onLoadError}
-          >
-            <p>Your browser does not support PDFs. Please download the PDF to view it.</p>
-          </object>
-        );
-      
-      case 'embed':
-        return (
-          <embed
-            src={pdfUrl}
-            type="application/pdf"
-            style={commonStyle}
-            onLoad={onLoadSuccess}
-            onError={onLoadError}
-          />
-        );
-      
-      default:
-        return null;
-    }
+    const viewerUrl = getViewerUrl();
+    
+    return (
+      <iframe
+        src={viewerUrl}
+        style={{
+          width: '100%',
+          height: '100%',
+          border: 'none',
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+        }}
+        onLoad={onLoadSuccess}
+        onError={onLoadError}
+        title={fileName}
+        allow="fullscreen"
+        sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+      />
+    );
   };
 
   return (
@@ -135,27 +92,6 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
       <div className="bg-gray-100 p-3 flex items-center justify-between border-b">
         <h3 className="font-medium truncate flex-1 text-center">{fileName}</h3>
         <div className="flex items-center space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePrevPage}
-            className="h-8 w-8 p-0"
-            disabled={currentPage <= 1}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm min-w-[80px] text-center">
-            {currentPage} / {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNextPage}
-            className="h-8 w-8 p-0"
-            disabled={currentPage >= totalPages}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -181,6 +117,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
               size="sm"
               onClick={handleRetry}
               className="h-8 w-8 p-0"
+              title={`Try ${viewerMethod === 'google' ? 'Mozilla' : viewerMethod === 'mozilla' ? 'Direct' : 'Google'} viewer`}
             >
               <RefreshCw className="h-4 w-4" />
             </Button>
@@ -203,7 +140,9 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
             <Skeleton className="h-4 w-3/4 mb-2" />
             <Skeleton className="h-4 w-2/3 mb-2" />
             <Skeleton className="h-4 w-1/2" />
-            <p className="text-sm text-muted-foreground mt-4">Loading PDF...</p>
+            <p className="text-sm text-muted-foreground mt-4">
+              Loading PDF with {viewerMethod === 'google' ? 'Google Docs' : viewerMethod === 'mozilla' ? 'Mozilla' : 'Direct'} viewer...
+            </p>
           </div>
         )}
         
@@ -212,7 +151,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
             <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
             <h3 className="text-lg font-medium mb-2">PDF Display Issue</h3>
             <p className="text-sm text-muted-foreground text-center mb-4">
-              Trying different display method: {viewerMethod}
+              Current method: {viewerMethod === 'google' ? 'Google Docs Viewer' : viewerMethod === 'mozilla' ? 'Mozilla PDF.js' : 'Direct Browser'}
             </p>
             <div className="flex gap-2">
               <Button
@@ -220,7 +159,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
                 variant="outline"
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Try Different Method
+                Try Different Viewer
               </Button>
               <Button
                 onClick={() => window.open(fileUrl, '_blank')}
