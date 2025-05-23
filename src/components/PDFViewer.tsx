@@ -2,7 +2,11 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ZoomIn, ZoomOut, AlertCircle, Download } from "lucide-react";
+import { ZoomIn, ZoomOut, AlertCircle, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Set up PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface PDFViewerProps {
   fileUrl: string;
@@ -13,30 +17,66 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [scale, setScale] = useState(1.0);
-  const embedRef = useRef<HTMLEmbedElement>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [pdfDoc, setPdfDoc] = useState<any>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   
   useEffect(() => {
+    loadPDF();
+  }, [fileUrl]);
+
+  useEffect(() => {
+    if (pdfDoc && currentPage) {
+      renderPage();
+    }
+  }, [pdfDoc, currentPage, scale]);
+
+  const loadPDF = async () => {
     setIsLoading(true);
     setHasError(false);
     
-    // Add a timeout to handle loading state
-    const loadTimer = setTimeout(() => {
+    try {
+      console.log("Loading PDF with PDF.js...");
+      const loadingTask = pdfjsLib.getDocument(fileUrl);
+      const pdf = await loadingTask.promise;
+      
+      setPdfDoc(pdf);
+      setTotalPages(pdf.numPages);
+      setCurrentPage(1);
+      console.log("PDF loaded successfully with", pdf.numPages, "pages");
+      
+    } catch (error) {
+      console.error("Error loading PDF:", error);
+      setHasError(true);
+    } finally {
       setIsLoading(false);
-    }, 3000);
-    
-    return () => clearTimeout(loadTimer);
-  }, [fileUrl]);
-
-  const handleEmbedLoad = () => {
-    console.log("PDF embed loaded successfully");
-    setIsLoading(false);
-    setHasError(false);
+    }
   };
 
-  const handleEmbedError = () => {
-    console.log("PDF embed failed to load");
-    setIsLoading(false);
-    setHasError(true);
+  const renderPage = async () => {
+    if (!pdfDoc || !canvasRef.current) return;
+
+    try {
+      const page = await pdfDoc.getPage(currentPage);
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+
+      const viewport = page.getViewport({ scale });
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport
+      };
+
+      await page.render(renderContext).promise;
+      console.log(`Rendered page ${currentPage}`);
+    } catch (error) {
+      console.error("Error rendering page:", error);
+      setHasError(true);
+    }
   };
 
   const handleZoomIn = () => {
@@ -47,14 +87,44 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
     setScale((prevScale) => Math.max(prevScale - 0.2, 0.5));
   };
 
-  // Force inline viewing with proper PDF parameters
-  const inlinePdfUrl = `${fileUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&page=1`;
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
 
   return (
     <div className="pdf-container flex flex-col h-full animate-in border rounded-lg overflow-hidden bg-white">
       <div className="bg-gray-100 p-3 flex items-center justify-between border-b">
         <h3 className="font-medium truncate flex-1 text-center">{fileName}</h3>
         <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePrevPage}
+            className="h-8 w-8 p-0"
+            disabled={currentPage <= 1}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm min-w-[80px] text-center">
+            {currentPage} / {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleNextPage}
+            className="h-8 w-8 p-0"
+            disabled={currentPage >= totalPages}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -85,7 +155,7 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
         </div>
       </div>
 
-      <div className="flex-1 relative overflow-hidden bg-gray-100">
+      <div className="flex-1 relative overflow-auto bg-gray-100 flex items-center justify-center">
         {isLoading && (
           <div className="absolute inset-0 bg-gray-50 flex flex-col items-center justify-center p-4 z-10">
             <Skeleton className="h-8 w-1/2 mb-4" />
@@ -111,28 +181,13 @@ const PDFViewer: React.FC<PDFViewerProps> = ({ fileUrl, fileName }) => {
             </Button>
           </div>
         ) : (
-          <div 
-            className="w-full h-full relative"
-            style={{ 
-              transform: `scale(${scale})`, 
-              transformOrigin: 'top left',
-              width: `${100 / scale}%`,
-              height: `${100 / scale}%`
+          <canvas
+            ref={canvasRef}
+            className={`max-w-full max-h-full border shadow-lg ${isLoading ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
+            style={{
+              display: isLoading ? 'none' : 'block'
             }}
-          >
-            <embed
-              ref={embedRef}
-              src={inlinePdfUrl}
-              type="application/pdf"
-              className={`w-full h-full ${isLoading ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
-              onLoad={handleEmbedLoad}
-              onError={handleEmbedError}
-              style={{
-                border: 'none',
-                outline: 'none'
-              }}
-            />
-          </div>
+          />
         )}
       </div>
     </div>
