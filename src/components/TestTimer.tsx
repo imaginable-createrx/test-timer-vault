@@ -75,9 +75,6 @@ const TestTimer: React.FC<TestTimerProps> = ({ durationMinutes, onTimeEnd }) => 
             "h-2 transition-colors duration-300",
             percentRemaining < 30 ? "bg-red-100" : "bg-blue-100"
           )}
-          indicatorClassName={cn(
-            percentRemaining < 30 ? "bg-red-500" : "bg-timerblue"
-          )}
         />
         
         <Button 
