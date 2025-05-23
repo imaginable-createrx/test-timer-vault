@@ -9,7 +9,97 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      answer_files: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_url: string
+          id: string
+          submission_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_url: string
+          id?: string
+          submission_id: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_url?: string
+          id?: string
+          submission_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "answer_files_submission_id_fkey"
+            columns: ["submission_id"]
+            isOneToOne: false
+            referencedRelation: "test_submissions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      test_files: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          duration_minutes: number
+          expires_at: string
+          file_name: string
+          file_url: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          duration_minutes: number
+          expires_at: string
+          file_name: string
+          file_url: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          duration_minutes?: number
+          expires_at?: string
+          file_name?: string
+          file_url?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      test_submissions: {
+        Row: {
+          id: string
+          submitted_at: string
+          submitted_by: string | null
+          test_id: string
+        }
+        Insert: {
+          id?: string
+          submitted_at?: string
+          submitted_by?: string | null
+          test_id: string
+        }
+        Update: {
+          id?: string
+          submitted_at?: string
+          submitted_by?: string | null
+          test_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "test_submissions_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "test_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

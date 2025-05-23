@@ -5,14 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { createFileUrl, generateId, storeTestFile, generateTestLink } from "@/utils/pdfHelper";
-import { TestFile } from "@/types";
+import { uploadFile, createTestFile, generateFileName, generateTestLink } from "@/utils/supabaseHelper";
 import { useToast } from "@/components/ui/use-toast";
 import { Timer } from "lucide-react";
 
 const PDFUploader = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [duration, setDuration] = useState<number>(60); // Default to 60 minutes
+  const [duration, setDuration] = useState<number>(60);
   const [isUploading, setIsUploading] = useState(false);
   const [testLink, setTestLink] = useState<string | null>(null);
   const { toast } = useToast();
@@ -34,7 +33,7 @@ const PDFUploader = () => {
     }
     
     setFile(selectedFile);
-    setTestLink(null); // Reset test link when a new file is chosen
+    setTestLink(null);
   };
 
   const handleDurationChange = (value: number[]) => {
@@ -54,20 +53,19 @@ const PDFUploader = () => {
     try {
       setIsUploading(true);
       
-      // In a production environment, we would upload to a server/cloud storage
-      // For now, we'll use a data URL and localStorage
-      const fileUrl = await createFileUrl(file);
+      // Generate unique filename and upload to Supabase storage
+      const fileName = generateFileName(file.name);
+      const fileUrl = await uploadFile(file, 'test_files', fileName);
       
-      const testFile: TestFile = {
-        id: generateId(),
-        fileName: file.name,
-        fileUrl,
-        durationMinutes: duration,
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      };
+      // Create test file record in database
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours from now
       
-      storeTestFile(testFile);
+      const testFile = await createTestFile({
+        file_name: file.name,
+        file_url: fileUrl,
+        duration_minutes: duration,
+        expires_at: expiresAt
+      });
       
       const link = generateTestLink(testFile.id);
       setTestLink(link);
@@ -78,12 +76,12 @@ const PDFUploader = () => {
       });
       
     } catch (error) {
+      console.error('Upload error:', error);
       toast({
         variant: "destructive",
         title: "Upload failed",
-        description: "There was an error creating your test. Please try again.",
+        description: error instanceof Error ? error.message : "There was an error creating your test. Please try again.",
       });
-      console.error(error);
     } finally {
       setIsUploading(false);
     }
@@ -147,8 +145,8 @@ const PDFUploader = () => {
           </Button>
           
           {testLink && (
-            <div className="bg-timerblue-light rounded-md p-4 border border-timerblue">
-              <Label className="text-sm font-medium text-timerblue-dark">
+            <div className="bg-blue-50 rounded-md p-4 border border-blue-200">
+              <Label className="text-sm font-medium text-blue-800">
                 Test Link (valid for 24 hours)
               </Label>
               <div className="flex mt-2">

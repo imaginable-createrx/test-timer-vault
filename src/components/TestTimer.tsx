@@ -4,7 +4,7 @@ import { AlertCircle, Clock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { formatTimeRemaining } from "@/utils/pdfHelper";
+import { formatTimeRemaining } from "@/utils/supabaseHelper";
 import { cn } from "@/lib/utils";
 
 interface TestTimerProps {

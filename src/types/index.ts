@@ -1,20 +1,25 @@
 
 export interface TestFile {
   id: string;
-  fileName: string;
-  fileUrl: string;
-  durationMinutes: number;
-  createdAt: string;
-  expiresAt: string;
+  file_name: string;
+  file_url: string;
+  duration_minutes: number;
+  created_at: string;
+  expires_at: string;
+  created_by?: string;
 }
 
 export interface TestSubmission {
-  testId: string;
-  answers: AnswerFile[];
+  id: string;
+  test_id: string;
+  submitted_at: string;
+  submitted_by?: string;
 }
 
 export interface AnswerFile {
   id: string;
-  fileName: string;
-  fileUrl: string;
+  submission_id: string;
+  file_name: string;
+  file_url: string;
+  created_at: string;
 }

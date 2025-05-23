@@ -4,9 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { generateId } from "@/utils/pdfHelper";
+import { uploadFile, createTestSubmission, createAnswerFiles, generateFileName } from "@/utils/supabaseHelper";
 import { useToast } from "@/components/ui/use-toast";
-import { AnswerFile } from "@/types";
 import { Upload, X, Check, FileImage } from "lucide-react";
 
 interface AnswerUploaderProps {
@@ -14,8 +13,14 @@ interface AnswerUploaderProps {
   onSubmitComplete: () => void;
 }
 
+interface AnswerFileLocal {
+  id: string;
+  fileName: string;
+  file: File;
+}
+
 const AnswerUploader: React.FC<AnswerUploaderProps> = ({ testId, onSubmitComplete }) => {
-  const [answerFiles, setAnswerFiles] = useState<AnswerFile[]>([]);
+  const [answerFiles, setAnswerFiles] = useState<AnswerFileLocal[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -27,7 +32,7 @@ const AnswerUploader: React.FC<AnswerUploaderProps> = ({ testId, onSubmitComplet
     }
     
     const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-    const newFiles: AnswerFile[] = [];
+    const newFiles: AnswerFileLocal[] = [];
     
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
@@ -41,28 +46,21 @@ const AnswerUploader: React.FC<AnswerUploaderProps> = ({ testId, onSubmitComplet
         continue;
       }
       
-      try {
-        // Convert file to data URL (in production, we'd upload to storage)
-        const fileUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-        
-        newFiles.push({
-          id: generateId(),
-          fileName: file.name,
-          fileUrl,
-        });
-      } catch (error) {
-        console.error("Error processing file:", error);
+      // Check file size (max 10MB)
+      if (file.size > 10 * 1024 * 1024) {
         toast({
           variant: "destructive",
-          title: "File processing error",
-          description: `Could not process ${file.name}. Please try again.`,
+          title: "File too large",
+          description: `${file.name} is larger than 10MB. Please choose a smaller file.`,
         });
+        continue;
       }
+      
+      newFiles.push({
+        id: Math.random().toString(36).substring(2, 15),
+        fileName: file.name,
+        file
+      });
     }
     
     setAnswerFiles((prevFiles) => [...prevFiles, ...newFiles]);
@@ -88,22 +86,37 @@ const AnswerUploader: React.FC<AnswerUploaderProps> = ({ testId, onSubmitComplet
     try {
       setIsSubmitting(true);
       
-      // In production, we'd send this to a server/Supabase
-      // For now, just simulate submission
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Create test submission first
+      const submission = await createTestSubmission(testId);
+      
+      // Upload all files to Supabase storage
+      const uploadPromises = answerFiles.map(async (answerFile) => {
+        const fileName = generateFileName(answerFile.fileName);
+        const fileUrl = await uploadFile(answerFile.file, 'answer_files', fileName);
+        return {
+          file_name: answerFile.fileName,
+          file_url: fileUrl
+        };
+      });
+      
+      const uploadedFiles = await Promise.all(uploadPromises);
+      
+      // Create answer file records in database
+      await createAnswerFiles(submission.id, uploadedFiles);
       
       toast({
         title: "Answers submitted successfully!",
-        description: "Your answers have been uploaded.",
+        description: "Your answers have been uploaded and saved.",
       });
       
       onSubmitComplete();
       
     } catch (error) {
+      console.error('Submission error:', error);
       toast({
         variant: "destructive",
         title: "Submission failed",
-        description: "There was an error submitting your answers. Please try again.",
+        description: error instanceof Error ? error.message : "There was an error submitting your answers. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
@@ -146,7 +159,7 @@ const AnswerUploader: React.FC<AnswerUploaderProps> = ({ testId, onSubmitComplet
         
         {answerFiles.length > 0 && (
           <div className="space-y-2">
-            <Label className="text-lg font-medium">Uploaded Files</Label>
+            <Label className="text-lg font-medium">Files to Submit</Label>
             <div className="space-y-2 max-h-80 overflow-y-auto p-1">
               {answerFiles.map((file) => (
                 <div
@@ -156,6 +169,9 @@ const AnswerUploader: React.FC<AnswerUploaderProps> = ({ testId, onSubmitComplet
                   <div className="flex items-center">
                     <FileImage className="h-5 w-5 text-primary mr-2" />
                     <span className="text-sm truncate max-w-xs">{file.fileName}</span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({(file.file.size / (1024 * 1024)).toFixed(1)} MB)
+                    </span>
                   </div>
                   <Button
                     variant="ghost"

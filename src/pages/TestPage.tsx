@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getTestFile } from "@/utils/pdfHelper";
+import { getTestFile } from "@/utils/supabaseHelper";
 import { TestFile } from "@/types";
 import PDFViewer from "@/components/PDFViewer";
 import TestTimer from "@/components/TestTimer";
@@ -21,23 +21,29 @@ const TestPage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const loadTest = () => {
+    const loadTest = async () => {
       if (!testId) {
         setError("Invalid test ID");
         setLoading(false);
         return;
       }
 
-      const testData = getTestFile(testId);
-      
-      if (!testData) {
-        setError("Test not found or has expired");
+      try {
+        const testData = await getTestFile(testId);
+        
+        if (!testData) {
+          setError("Test not found or has expired");
+          setLoading(false);
+          return;
+        }
+        
+        setTest(testData);
         setLoading(false);
-        return;
+      } catch (error) {
+        console.error('Error loading test:', error);
+        setError("Failed to load test. Please try again.");
+        setLoading(false);
       }
-      
-      setTest(testData);
-      setLoading(false);
     };
     
     loadTest();
@@ -117,9 +123,9 @@ const TestPage = () => {
       <div className="container py-4">
         {test && (
           <div className="mb-4">
-            <h1 className="text-2xl font-bold">{test.fileName}</h1>
+            <h1 className="text-2xl font-bold">{test.file_name}</h1>
             <p className="text-sm text-muted-foreground">
-              Time allowed: {test.durationMinutes} minutes
+              Time allowed: {test.duration_minutes} minutes
             </p>
           </div>
         )}
@@ -127,13 +133,13 @@ const TestPage = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2 h-[70vh]">
             {test && (
-              <PDFViewer fileUrl={test.fileUrl} fileName={test.fileName} />
+              <PDFViewer fileUrl={test.file_url} fileName={test.file_name} />
             )}
           </div>
           <div>
             {test && (
               <TestTimer 
-                durationMinutes={test.durationMinutes} 
+                durationMinutes={test.duration_minutes} 
                 onTimeEnd={handleTestEnd} 
               />
             )}
